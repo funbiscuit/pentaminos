@@ -177,7 +177,7 @@ const Game = struct {
                     if (self.pieces_left == 0) {
                         // Solution found
                         self.solutions += 1;
-                        self.print();
+                        // self.print();
                         if (!self.find_all) {
                             return;
                         }
@@ -259,7 +259,7 @@ const Game = struct {
     }
 };
 
-pub fn main() !void {
+pub fn main2() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -300,4 +300,85 @@ pub fn main() !void {
     const elapsed = end_time - start_time;
 
     std.debug.print("\nFound {d} solutions in {} ms!\n", .{ board.solutions, elapsed });
+}
+
+fn generateCombinations(allocator: std.mem.Allocator, elements: []const u8, k: usize, start: usize, current: *std.ArrayList(u8), result: *std.ArrayList(std.ArrayList(u8))) !void {
+    // If we have selected k elements, add the current combination to result
+    if (current.items.len == k) {
+        var combination = try std.ArrayList(u8).initCapacity(allocator, k);
+        combination.appendSliceAssumeCapacity(current.items);
+        try result.append(allocator, combination);
+        return;
+    }
+
+    // Generate combinations by including each possible element
+    var i = start;
+    while (i < elements.len) : (i += 1) {
+        // Add current element to combination
+        try current.append(allocator, elements[i]);
+
+        // Recursively generate combinations with remaining elements
+        try generateCombinations(allocator, elements, k, i + 1, current, result);
+
+        // Backtrack: remove last element
+        _ = current.pop();
+    }
+}
+
+fn canSolve(arena: Allocator, pieces_str: []const u8) bool {
+    var pieces_array: [12]Piece = undefined;
+
+    for (pieces_str, 0..) |f, i| {
+        if (std.meta.stringToEnum(Piece, &[_]u8{f})) |piece| {
+            pieces_array[i] = piece;
+        } else {
+            std.debug.print("Invalid piece: {c}\n", .{f});
+            return false;
+        }
+    }
+
+    const pieces = pieces_array[0..pieces_str.len];
+
+    if (pieces.len < 3) {
+        std.debug.print("Can't create from {d} pieces. Need at least 3\n", .{pieces.len});
+        return false;
+    }
+
+    var board = Game.init(arena, pieces, 5, pieces.len, false) catch return false;
+    const start = board.firstEmpty(0).?;
+    board.play(start);
+    return board.solutions > 0;
+}
+
+pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // Input: 12 elements
+    const elements = "FILNPTUVWXYZ";
+
+    // Generate combinations C(12, 5)
+    for (3..12) |k| {
+        var current_combination = std.ArrayList(u8).empty;
+        var all_combinations = std.ArrayList(std.ArrayList(u8)).empty;
+
+        try generateCombinations(allocator, elements, k, 0, &current_combination, &all_combinations);
+
+        // Print results
+        // std.debug.print("Total combinations: {}\n\n", .{all_combinations.items.len});
+
+        var idx: usize = 0;
+        for (all_combinations.items) |combination| {
+            if (canSolve(allocator, combination.items)) {
+                // std.debug.print("Combination {}: ", .{idx + 1});
+                for (combination.items) |elem| {
+                    std.debug.print("{c} ", .{elem});
+                }
+                std.debug.print("\n", .{});
+                idx += 1;
+            }
+        }
+        // std.debug.print("Combinations with solution: {}\n\n", .{idx});
+    }
 }
